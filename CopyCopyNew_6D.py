@@ -30,6 +30,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
     T1Min = 0;
     T2Max = 36.7875/2.0;
     T2Min = 0;
+    max_list = [T1Max,T2Max];
     
     m = 1.25; 
     grav = 9.81;
@@ -154,7 +155,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
     sess.run(init);
 
     def V_0(x):
-        return np.linalg.norm(x,ord=np.inf,axis=1,keepdims=True) - 2.0
+        return np.linalg.norm(x,ord=np.inf,axis=1,keepdims=True) - 1.0
         #return np.linalg.norm(x,axis=1,keepdims=True) - 2.0
 
     def p_corr(ALL_x):
@@ -223,7 +224,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
         true_ac_list = [];
         for i in range(len(perms)): #2**num_actions
             ac_tuple = perms[i];
-            ac_list = [np.float(tmp1)*tmp2 for tmp1,tmp2 in zip(ac_tuple,max_list)]; #ASSUMING: aMax = -aMin
+            ac_list = [(tmp1==1)*tmp2 for tmp1,tmp2 in zip(ac_tuple,max_list)]; #ASSUMING: aMax = -aMin
             true_ac_list.append(ac_list);
             opt_a = np.asarray(ac_list)*np.ones([ALL_x.shape[0],1]);
             Snx = ALL_x;
@@ -231,7 +232,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
             next_states.append(Snx);
         next_states = np.concatenate(next_states,axis=0);
         if(ret_traj): traj.append(next_states);
-        values = V_0(next_states[:,[0,1]]);
+        values = V_0(next_states[:,[0,2]]);
         
         for params in F_PI:
             for ind in range(len(params)): #Reload pi*(x,t+dt) parameters
@@ -242,14 +243,14 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
                 opt_a = Hot_to_Cold(hots,true_ac_list)
                 next_states = RK4(next_states,dt/float(subSamples),opt_a,None);
                 if(ret_traj): traj.append(next_states);
-                values = np.min((values,V_0(next_states[:,[0,1]])),axis=0);      
+                values = np.min((values,V_0(next_states[:,[0,2]])),axis=0);      
             
         compare_vals = values.reshape([-1,ALL_x.shape[0]]).T
         index_best_a = compare_vals.argmin(axis=1)#.reshape([-1,1]);    #Changed to ARGMAX
         values = np.min(compare_vals,axis=1,keepdims=True);             #Changed to MAX
-        final_values = np.min((values,V_0(ALL_x[:,[0,1]])),axis=0)
+        final_values = np.min((values,V_0(ALL_x[:,[0,2]])),axis=0)
         
-        values_ = V_0(next_states[:,[0,1]]); 
+        values_ = V_0(next_states[:,[0,2]]); 
         compare_vals_ = values_.reshape([-1,ALL_x.shape[0]]).T;
         values_ = np.min(compare_vals_,axis=1,keepdims=True);
         
@@ -263,10 +264,11 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
         return sess.run(make_hot,{hot_input:index_best_a}),values_#final_values 
 
     def ConvCosSin(ALL_x):
-        sin_phi = np.sin(ALL_x[:,2,None])
-        cos_phi = np.cos(ALL_x[:,2,None])
-        insertion = np.concatenate((sin_phi,cos_phi),axis=1)
-        ret_val = np.insert(ALL_x[:,[0,1,3]],2,insertion.T,axis=1)
+        sin_phi = np.sin(ALL_x[:,4,None])
+        cos_phi = np.cos(ALL_x[:,4,None])
+        sin_ome = np.sin(ALL_x[:,5,None])
+        cos_ome = np.cos(ALL_x[:,5,None])        
+        ret_val = np.concatenate((ALL_x[:,[0,1,2,3]],sin_phi,cos_phi,sin_ome,cos_ome),axis=1)
         return ret_val
     # *****************************************************************************
     #
@@ -281,7 +283,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
     nunu = lr_schedule.value(k);
     
     if(imp == 1.0):
-        ALL_PI = pickle.load( open( "policies3.pkl", "rb" ) );
+        ALL_PI = pickle.load( open( "policies6D_1.pkl", "rb" ) );
     while (imp == 1.0):
         state_get = input('State: ');
         sub_smpl = input('SUBSAMPLING: ');
@@ -293,173 +295,167 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
         
         if(np.mod(i,renew) == 0 and i is not 0):       
             
-#            plt.figure(1)
+#            fig = plt.figure(1)
 #            plt.clf();
-#            letsee = sess.run(ola3,{states:pre_ALL_x,y:PI})
-#            letsee = np.array([not(i) for i in letsee])
-#            ALL_xx = pre_ALL_x[letsee]
-#            mhm = ALL_x[letsee]
-#            cc = (ALL_xx[:,-1]-6.0)/6.0
-#            #plt.scatter(ALL_xx[:,0],ALL_xx[:,1],c=cc) 
-#            plt.scatter(mhm[:,2],ALL_xx[:,0],c=cc) 
-#            plt.pause(0.01);
-            
-            fig = plt.figure(1)
-            plt.clf();
-            ax = fig.add_subplot(121, projection='3d')
-            ax.scatter(mini_reach[:,0], mini_reach[:,1], mini_reach[:,2]);
-            _,nn_vals = getPI(grid_check,ALL_PI)
-            fi = (np.abs(nn_vals) < 0.05)
-            mini_reach_ = grid_check[fi[:,0]]
-            ax = fig.add_subplot(122, projection='3d')
-            ax.scatter(mini_reach_[:,0], mini_reach_[:,1], mini_reach_[:,2]);            
-            plt.pause(0.01);            
-            
-            plt.figure(3)
-            d = 0.1
-            plt.clf();
-            plt.title(str([str(i)+" : "+str(perms[i]) for i in range(len(perms))]))
-            ALL_xp = np.random.uniform(-6.0,6.0,(nrolls/100,layers[0]-1));
-            plt.subplot(2,3,1) #SUBPLOT
-            ALL_xp[:,2] = 0.0 + d#np.pi/2.0;
-            ALL_xp[:,3] = 9.0;
-            letsee_ = sess.run(Tt,{states:ConvCosSin(ALL_xp)});
-            letsee_ = letsee_.argmax(axis=1);
-            plt.scatter(ALL_xp[:,0],ALL_xp[:,1],c=letsee_)
-            plt.colorbar()
-            plt.subplot(2,3,2) #SUBPLOT
-            ALL_xp[:,2] = np.pi/2 + d;#2*np.pi/3.0;
-            ALL_xp[:,3] = 9.0;
-            letsee_ = sess.run(Tt,{states:ConvCosSin(ALL_xp)});
-            letsee_ = letsee_.argmax(axis=1);
-            plt.scatter(ALL_xp[:,0],ALL_xp[:,1],c=letsee_)
-            plt.colorbar()
-            plt.subplot(2,3,3) #SUBPLOT
-            ALL_xp[:,2] = np.pi + d;#4*np.pi/3.0;
-            ALL_xp[:,3] = 9.0;
-            letsee_ = sess.run(Tt,{states:ConvCosSin(ALL_xp)});
-            letsee_ = letsee_.argmax(axis=1);
-            plt.scatter(ALL_xp[:,0],ALL_xp[:,1],c=letsee_)
-            plt.colorbar()
-            plt.subplot(2,3,4) #SUBPLOT
-            ALL_xp[:,2] = 0.0 - d#np.pi/2.0;
-            ALL_xp[:,3] = 9.0;
-            letsee_ = sess.run(Tt,{states:ConvCosSin(ALL_xp)});
-            letsee_ = letsee_.argmax(axis=1);
-            plt.scatter(ALL_xp[:,0],ALL_xp[:,1],c=letsee_)
-            plt.colorbar()
-            plt.subplot(2,3,5) #SUBPLOT
-            ALL_xp[:,2] = np.pi/2 - d;#2*np.pi/3.0;
-            ALL_xp[:,3] = 9.0;
-            letsee_ = sess.run(Tt,{states:ConvCosSin(ALL_xp)});
-            letsee_ = letsee_.argmax(axis=1);
-            plt.scatter(ALL_xp[:,0],ALL_xp[:,1],c=letsee_)
-            plt.colorbar()
-            plt.subplot(2,3,6) #SUBPLOT
-            ALL_xp[:,2] = np.pi-d#4*np.pi/3.0;
-            ALL_xp[:,3] = 9.0;
-            letsee_ = sess.run(Tt,{states:ConvCosSin(ALL_xp)});
-            letsee_ = letsee_.argmax(axis=1);
-            plt.scatter(ALL_xp[:,0],ALL_xp[:,1],c=letsee_)
-            plt.colorbar()            
-            plt.pause(0.01);            
+#            ax = fig.add_subplot(121, projection='3d')
+#            ax.scatter(mini_reach[:,0], mini_reach[:,1], mini_reach[:,2]);
+#            _,nn_vals = getPI(grid_check,ALL_PI)
+#            fi = (np.abs(nn_vals) < 0.05)
+#            mini_reach_ = grid_check[fi[:,0]]
+#            ax = fig.add_subplot(122, projection='3d')
+#            ax.scatter(mini_reach_[:,0], mini_reach_[:,1], mini_reach_[:,2]);            
+#            plt.pause(0.01);            
+#            
+#            plt.figure(3)
+#            d = 0.1
+#            plt.clf();
+#            plt.title(str([str(i)+" : "+str(perms[i]) for i in range(len(perms))]))
+#            ALL_xp = np.random.uniform(-6.0,6.0,(nrolls/100,layers[0]-1));
+#            plt.subplot(2,3,1) #SUBPLOT
+#            ALL_xp[:,2] = 0.0 + d#np.pi/2.0;
+#            ALL_xp[:,3] = 9.0;
+#            letsee_ = sess.run(Tt,{states:ConvCosSin(ALL_xp)});
+#            letsee_ = letsee_.argmax(axis=1);
+#            plt.scatter(ALL_xp[:,0],ALL_xp[:,1],c=letsee_)
+#            plt.colorbar()
+#            plt.subplot(2,3,2) #SUBPLOT
+#            ALL_xp[:,2] = np.pi/2 + d;#2*np.pi/3.0;
+#            ALL_xp[:,3] = 9.0;
+#            letsee_ = sess.run(Tt,{states:ConvCosSin(ALL_xp)});
+#            letsee_ = letsee_.argmax(axis=1);
+#            plt.scatter(ALL_xp[:,0],ALL_xp[:,1],c=letsee_)
+#            plt.colorbar()
+#            plt.subplot(2,3,3) #SUBPLOT
+#            ALL_xp[:,2] = np.pi + d;#4*np.pi/3.0;
+#            ALL_xp[:,3] = 9.0;
+#            letsee_ = sess.run(Tt,{states:ConvCosSin(ALL_xp)});
+#            letsee_ = letsee_.argmax(axis=1);
+#            plt.scatter(ALL_xp[:,0],ALL_xp[:,1],c=letsee_)
+#            plt.colorbar()
+#            plt.subplot(2,3,4) #SUBPLOT
+#            ALL_xp[:,2] = 0.0 - d#np.pi/2.0;
+#            ALL_xp[:,3] = 9.0;
+#            letsee_ = sess.run(Tt,{states:ConvCosSin(ALL_xp)});
+#            letsee_ = letsee_.argmax(axis=1);
+#            plt.scatter(ALL_xp[:,0],ALL_xp[:,1],c=letsee_)
+#            plt.colorbar()
+#            plt.subplot(2,3,5) #SUBPLOT
+#            ALL_xp[:,2] = np.pi/2 - d;#2*np.pi/3.0;
+#            ALL_xp[:,3] = 9.0;
+#            letsee_ = sess.run(Tt,{states:ConvCosSin(ALL_xp)});
+#            letsee_ = letsee_.argmax(axis=1);
+#            plt.scatter(ALL_xp[:,0],ALL_xp[:,1],c=letsee_)
+#            plt.colorbar()
+#            plt.subplot(2,3,6) #SUBPLOT
+#            ALL_xp[:,2] = np.pi-d#4*np.pi/3.0;
+#            ALL_xp[:,3] = 9.0;
+#            letsee_ = sess.run(Tt,{states:ConvCosSin(ALL_xp)});
+#            letsee_ = letsee_.argmax(axis=1);
+#            plt.scatter(ALL_xp[:,0],ALL_xp[:,1],c=letsee_)
+#            plt.colorbar()            
+#            plt.pause(0.01);            
             
             ALL_PI.insert(0,sess.run(theta))            
             
             k = 0;
-            ALL_x = np.random.uniform(-6.0,6.0,(nrolls,layers[0]-1));
-            ALL_x[:,2] = ALL_x[:,2]*np.pi/6.0 + np.pi;
-            ALL_x[:,3] = ALL_x[:,3]*3.0/6.0 + 9.0;
+            ALL_x = np.random.uniform(-5.0,5.0,(nrolls,layers[0]-2));
+            ALL_x[:,1] = ALL_x[:,2]*2.0
+            ALL_x[:,3] = ALL_x[:,3]*2.0
+            ALL_x[:,4] = ALL_x[:,4]*np.pi/5.0 + np.pi;
+            ALL_x[:,5] = ALL_x[:,5]*np.pi/5.0 + np.pi;            
             PI,_ = getPI(ALL_x,ALL_PI);
             pre_ALL_x = ConvCosSin(ALL_x);
             
-            ALL_x_ = np.random.uniform(-6.0,6.0,(nrolls/100,layers[0]-1));
-            ALL_x_[:,2] = ALL_x_[:,2]*np.pi/6.0 + np.pi;
-            ALL_x_[:,3] = ALL_x_[:,3]*3.0/6.0 + 9.0;
+            ALL_x_ = np.random.uniform(-5.0,5.0,(nrolls/100,layers[0]-2));
+            ALL_x_[:,1] = ALL_x_[:,2]*2.0
+            ALL_x_[:,3] = ALL_x_[:,3]*2.0
+            ALL_x_[:,4] = ALL_x_[:,4]*np.pi/5.0 + np.pi;
+            ALL_x_[:,5] = ALL_x_[:,5]*np.pi/5.0 + np.pi; 
             PI_,_ = getPI(ALL_x_,ALL_PI);
             pre_ALL_x_ = ConvCosSin(ALL_x_);
 
-            tmp = np.random.randint(len(reach100s[:,:-1]), size=12000);
-            _,ZR = getPI(reach100s[tmp,:-1],ALL_PI)
-            #ZR = sess.run(Tt,{states:reach100s[:,:-1]});
-            error1 = ZR - reach100s[tmp,-1,None];
-            
-           
-            plt.figure(2)
-            _,Z000 = getPI(grid_eval,ALL_PI);
-            _,Z001 = getPI(grid_eval_,ALL_PI);
-            _,Z002 = getPI(grid_eval__,ALL_PI);            
-            Z000 = np.reshape(Z000,X.shape);
-            Z001 = np.reshape(Z001,X.shape);
-            Z002 = np.reshape(Z002,X.shape);
-            #filter_in = (Z000 <= 0.05) #& (Z000 >= 0.05);
-            filter_out = (Z000 > 0.00) #| (Z000 < -0.05);       
-            filter_out_ = (Z001 > 0.00) #| (Z000 < -0.05);       
-            filter_out__ = (Z002 > 0.00) #| (Z000 < -0.05);       
-            #Z000[filter_in] = 1.0;
-            Z000[filter_out] = 0.0;
-            Z001[filter_out_] = 0.0;
-            Z002[filter_out__] = 0.0;
+#            tmp = np.random.randint(len(reach100s[:,:-1]), size=12000);
+#            _,ZR = getPI(reach100s[tmp,:-1],ALL_PI)
+#            #ZR = sess.run(Tt,{states:reach100s[:,:-1]});
+#            error1 = ZR - reach100s[tmp,-1,None];
+#            
+#           
+#            plt.figure(2)
+#            _,Z000 = getPI(grid_eval,ALL_PI);
+#            _,Z001 = getPI(grid_eval_,ALL_PI);
+#            _,Z002 = getPI(grid_eval__,ALL_PI);            
+#            Z000 = np.reshape(Z000,X.shape);
+#            Z001 = np.reshape(Z001,X.shape);
+#            Z002 = np.reshape(Z002,X.shape);
+#            #filter_in = (Z000 <= 0.05) #& (Z000 >= 0.05);
+#            filter_out = (Z000 > 0.00) #| (Z000 < -0.05);       
+#            filter_out_ = (Z001 > 0.00) #| (Z000 < -0.05);       
+#            filter_out__ = (Z002 > 0.00) #| (Z000 < -0.05);       
+#            #Z000[filter_in] = 1.0;
+#            Z000[filter_out] = 0.0;
+#            Z001[filter_out_] = 0.0;
+#            Z002[filter_out__] = 0.0;
+#
+#            _,Z000l = getPI(grid_evall,ALL_PI);
+#            _,Z001l = getPI(grid_evall_,ALL_PI);
+#            _,Z002l = getPI(grid_evall__,ALL_PI);             
+#            Z000l = np.reshape(Z000l,X.shape);
+#            Z001l = np.reshape(Z001l,X.shape);
+#            Z002l = np.reshape(Z002l,X.shape);
+#            #filter_in = (Z000 <= 0.05) #& (Z000 >= 0.05);
+#            filter_outl = (Z000l > 0.00) #| (Z000 < -0.05);       
+#            filter_out_l = (Z001l > 0.00) #| (Z000 < -0.05);       
+#            filter_out__l = (Z002l > 0.00) #| (Z000 < -0.05);       
+#            #Z000[filter_in] = 1.0;
+#            Z000l[filter_outl] = 0.0;
+#            Z001l[filter_out_l] = 0.0;
+#            Z002l[filter_out__l] = 0.0;
+#
+#            plt.clf();
+#            #plt.plot(ALL_t_, np.abs(allE), 'ro');
+#            #plt.axis([-1.0, 0.0, 0.0, 10.0])
+#            plt.subplot(2,3,1)
+#            plt.imshow(Z000,cmap='gray');
+#            plt.plot([30*f, 30*f], [30*f, 70*f], 'r-', lw=1)
+#            plt.plot([30*f, 70*f], [70*f, 70*f], 'r-', lw=1)
+#            plt.plot([70*f, 70*f], [70*f, 30*f], 'r-', lw=1)
+#            plt.plot([70*f, 30*f], [30*f, 30*f], 'r-', lw=1)
+#            plt.subplot(2,3,2)
+#            plt.imshow(Z001,cmap='gray');
+#            plt.plot([30*f, 30*f], [30*f, 70*f], 'r-', lw=1)
+#            plt.plot([30*f, 70*f], [70*f, 70*f], 'r-', lw=1)
+#            plt.plot([70*f, 70*f], [70*f, 30*f], 'r-', lw=1)
+#            plt.plot([70*f, 30*f], [30*f, 30*f], 'r-', lw=1)
+#            plt.subplot(2,3,3)
+#            plt.imshow(Z002,cmap='gray');
+#            plt.plot([30*f, 30*f], [30*f, 70*f], 'r-', lw=1)
+#            plt.plot([30*f, 70*f], [70*f, 70*f], 'r-', lw=1)
+#            plt.plot([70*f, 70*f], [70*f, 30*f], 'r-', lw=1)
+#            plt.plot([70*f, 30*f], [30*f, 30*f], 'r-', lw=1)
+#            plt.subplot(2,3,4)
+#            plt.imshow(Z000l,cmap='gray');
+#            plt.plot([30*f, 30*f], [30*f, 70*f], 'r-', lw=1)
+#            plt.plot([30*f, 70*f], [70*f, 70*f], 'r-', lw=1)
+#            plt.plot([70*f, 70*f], [70*f, 30*f], 'r-', lw=1)
+#            plt.plot([70*f, 30*f], [30*f, 30*f], 'r-', lw=1)
+#            plt.subplot(2,3,5)
+#            plt.imshow(Z001l,cmap='gray');
+#            plt.plot([30*f, 30*f], [30*f, 70*f], 'r-', lw=1)
+#            plt.plot([30*f, 70*f], [70*f, 70*f], 'r-', lw=1)
+#            plt.plot([70*f, 70*f], [70*f, 30*f], 'r-', lw=1)
+#            plt.plot([70*f, 30*f], [30*f, 30*f], 'r-', lw=1)
+#            plt.subplot(2,3,6)
+#            plt.imshow(Z002l,cmap='gray'); 
+#            plt.plot([30*f, 30*f], [30*f, 70*f], 'r-', lw=1)
+#            plt.plot([30*f, 70*f], [70*f, 70*f], 'r-', lw=1)
+#            plt.plot([70*f, 70*f], [70*f, 30*f], 'r-', lw=1)
+#            plt.plot([70*f, 30*f], [30*f, 30*f], 'r-', lw=1)
+#            plt.pause(0.01);
 
-            _,Z000l = getPI(grid_evall,ALL_PI);
-            _,Z001l = getPI(grid_evall_,ALL_PI);
-            _,Z002l = getPI(grid_evall__,ALL_PI);             
-            Z000l = np.reshape(Z000l,X.shape);
-            Z001l = np.reshape(Z001l,X.shape);
-            Z002l = np.reshape(Z002l,X.shape);
-            #filter_in = (Z000 <= 0.05) #& (Z000 >= 0.05);
-            filter_outl = (Z000l > 0.00) #| (Z000 < -0.05);       
-            filter_out_l = (Z001l > 0.00) #| (Z000 < -0.05);       
-            filter_out__l = (Z002l > 0.00) #| (Z000 < -0.05);       
-            #Z000[filter_in] = 1.0;
-            Z000l[filter_outl] = 0.0;
-            Z001l[filter_out_l] = 0.0;
-            Z002l[filter_out__l] = 0.0;
-
-            plt.clf();
-            #plt.plot(ALL_t_, np.abs(allE), 'ro');
-            #plt.axis([-1.0, 0.0, 0.0, 10.0])
-            plt.subplot(2,3,1)
-            plt.imshow(Z000,cmap='gray');
-            plt.plot([30*f, 30*f], [30*f, 70*f], 'r-', lw=1)
-            plt.plot([30*f, 70*f], [70*f, 70*f], 'r-', lw=1)
-            plt.plot([70*f, 70*f], [70*f, 30*f], 'r-', lw=1)
-            plt.plot([70*f, 30*f], [30*f, 30*f], 'r-', lw=1)
-            plt.subplot(2,3,2)
-            plt.imshow(Z001,cmap='gray');
-            plt.plot([30*f, 30*f], [30*f, 70*f], 'r-', lw=1)
-            plt.plot([30*f, 70*f], [70*f, 70*f], 'r-', lw=1)
-            plt.plot([70*f, 70*f], [70*f, 30*f], 'r-', lw=1)
-            plt.plot([70*f, 30*f], [30*f, 30*f], 'r-', lw=1)
-            plt.subplot(2,3,3)
-            plt.imshow(Z002,cmap='gray');
-            plt.plot([30*f, 30*f], [30*f, 70*f], 'r-', lw=1)
-            plt.plot([30*f, 70*f], [70*f, 70*f], 'r-', lw=1)
-            plt.plot([70*f, 70*f], [70*f, 30*f], 'r-', lw=1)
-            plt.plot([70*f, 30*f], [30*f, 30*f], 'r-', lw=1)
-            plt.subplot(2,3,4)
-            plt.imshow(Z000l,cmap='gray');
-            plt.plot([30*f, 30*f], [30*f, 70*f], 'r-', lw=1)
-            plt.plot([30*f, 70*f], [70*f, 70*f], 'r-', lw=1)
-            plt.plot([70*f, 70*f], [70*f, 30*f], 'r-', lw=1)
-            plt.plot([70*f, 30*f], [30*f, 30*f], 'r-', lw=1)
-            plt.subplot(2,3,5)
-            plt.imshow(Z001l,cmap='gray');
-            plt.plot([30*f, 30*f], [30*f, 70*f], 'r-', lw=1)
-            plt.plot([30*f, 70*f], [70*f, 70*f], 'r-', lw=1)
-            plt.plot([70*f, 70*f], [70*f, 30*f], 'r-', lw=1)
-            plt.plot([70*f, 30*f], [30*f, 30*f], 'r-', lw=1)
-            plt.subplot(2,3,6)
-            plt.imshow(Z002l,cmap='gray'); 
-            plt.plot([30*f, 30*f], [30*f, 70*f], 'r-', lw=1)
-            plt.plot([30*f, 70*f], [70*f, 70*f], 'r-', lw=1)
-            plt.plot([70*f, 70*f], [70*f, 30*f], 'r-', lw=1)
-            plt.plot([70*f, 30*f], [30*f, 30*f], 'r-', lw=1)
-            plt.pause(0.01);
-
-            t = t - dt;  
+            t = t - dt; 
+            print('Again.')
 #            sess.run(set_to_not_zero);
-            print str(t) + " || " + str(np.max(np.abs(error1))) + " , " + str(np.mean(np.abs(error1))) + "|ITR=" + str(i)                                                #VAR         
+#            print str(t) + " || " + str(np.max(np.abs(error1))) + " , " + str(np.mean(np.abs(error1))) + "|ITR=" + str(i)                                                #VAR         
             
 #            plt.figure(4)
 #            plt.clf();
@@ -468,7 +464,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
 #            ALL_xp = ALL_x[b_sele]; 
 #            letsee_ = PI[b_sele];
 #            b_sele = (np.abs(ALL_xp[:,2]-np.pi/2.0 + 0.1) < 0.1);
-#            ALL_xp = ALL_xp[b_sele]; 
+#            ALL_xp = ALL_xp[b_sele];
 #            letsee_ = letsee_[b_sele];  
 #            _,_ = getPI(ALL_xp);
 #            #plt.subplot(2,3,1) #SUBPLOT
@@ -484,79 +480,25 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
             
         #elif(i is 0):
         elif(np.mod(i,renew) == 0 and i is 0):
-            
-            k = 0;
+
 #            sess.run(set_to_zero);
-            ALL_x = np.random.uniform(-6.0,6.0,(nrolls,layers[0]-1));
-            ALL_x[:,2] = ALL_x[:,2]*np.pi/6.0 + np.pi;
-            ALL_x[:,3] = ALL_x[:,3]*3.0/6.0 + 9.0;
-            PI,_ = getPI(ALL_x); 
+            ALL_x = np.random.uniform(-5.0,5.0,(nrolls,layers[0]-2));
+            ALL_x[:,1] = ALL_x[:,2]*2.0
+            ALL_x[:,3] = ALL_x[:,3]*2.0
+            ALL_x[:,4] = ALL_x[:,4]*np.pi/5.0 + np.pi;
+            ALL_x[:,5] = ALL_x[:,5]*np.pi/5.0 + np.pi;            
+            PI,_ = getPI(ALL_x);
             pre_ALL_x = ConvCosSin(ALL_x);
             
-#            load = sio.loadmat('opt_a_0.5.mat');
-#            load = load['data_s']
-#            ALL_x = load[:,:-1]
-#            ALL_x[:,2] = ALL_x[:,2] + np.pi;
-#            pre_ALL_x = ConvCosSin(ALL_x);
-#            acts = load[:,-1,None]
-#            PI = sess.run(make_hot,{hot_input:acts[:,0]})
-            
-            ALL_x_ = np.random.uniform(-6.0,6.0,(nrolls/100,layers[0]-1));
-            ALL_x_[:,2] = ALL_x_[:,2]*np.pi/6.0 + np.pi;
-            ALL_x_[:,3] = ALL_x_[:,3]*3.0/6.0 + 9.0;
+            ALL_x_ = np.random.uniform(-5.0,5.0,(nrolls/100,layers[0]-2));
+            ALL_x_[:,1] = ALL_x_[:,2]*2.0
+            ALL_x_[:,3] = ALL_x_[:,3]*2.0
+            ALL_x_[:,4] = ALL_x_[:,4]*np.pi/5.0 + np.pi;
+            ALL_x_[:,5] = ALL_x_[:,5]*np.pi/5.0 + np.pi; 
             PI_,_ = getPI(ALL_x_);
-            pre_ALL_x_ = ConvCosSin(ALL_x_);            
+            pre_ALL_x_ = ConvCosSin(ALL_x_);           
 #            sess.run(set_to_not_zero);
-            
-            plt.figure(4)
-            #plt.clf();
-            plt.title(str([str(i)+" : "+str(perms[i]) for i in range(len(perms))]))
-            b_sele = (np.abs(ALL_x[:,-1]-7.5) < 0.1); 
-            ALL_xp = ALL_x[b_sele]; 
-            letsee_ = PI[b_sele];
-            b_sele = (ALL_xp[:,2] < 0.1);
-            ALL_xp = ALL_xp[b_sele]; 
-            letsee_ = letsee_[b_sele];  
-            #plt.subplot(2,3,1) #SUBPLOT
-            letsee_ = letsee_.argmax(axis=1);
-            plt.scatter(ALL_xp[:,0],ALL_xp[:,1],c=letsee_)
-            plt.colorbar()
-#            plt.subplot(2,3,2) #SUBPLOT
-#            ALL_xp[:,2] = np.pi/2.0;
-#            ALL_xp[:,3] = 6.0;
-#            letsee_ = sess.run(Tt,{states:ALL_xp});
-#            letsee_ = letsee_.argmax(axis=1);
-#            plt.scatter(ALL_xp[:,0],ALL_xp[:,1],c=letsee_)
-#            plt.colorbar()
-#            plt.subplot(2,3,3) #SUBPLOT
-#            ALL_xp[:,2] = np.pi;
-#            ALL_xp[:,3] = 6.0;
-#            letsee_ = sess.run(Tt,{states:ALL_xp});
-#            letsee_ = letsee_.argmax(axis=1);
-#            plt.scatter(ALL_xp[:,0],ALL_xp[:,1],c=letsee_)
-#            plt.colorbar()
-#            plt.subplot(2,3,4) #SUBPLOT
-#            ALL_xp[:,2] = 0.0#np.pi/2.0;
-#            ALL_xp[:,3] = 12.0;
-#            letsee_ = sess.run(Tt,{states:ALL_xp});
-#            letsee_ = letsee_.argmax(axis=1);
-#            plt.scatter(ALL_xp[:,0],ALL_xp[:,1],c=letsee_)
-#            plt.colorbar()
-#            plt.subplot(2,3,5) #SUBPLOT
-#            ALL_xp[:,2] = np.pi/2.0;
-#            ALL_xp[:,3] = 12.0;
-#            letsee_ = sess.run(Tt,{states:ALL_xp});
-#            letsee_ = letsee_.argmax(axis=1);
-#            plt.scatter(ALL_xp[:,0],ALL_xp[:,1],c=letsee_)
-#            plt.colorbar()
-#            plt.subplot(2,3,6) #SUBPLOT
-#            ALL_xp[:,2] = np.pi;
-#            ALL_xp[:,3] = 12.0;
-#            letsee_ = sess.run(Tt,{states:ALL_xp});
-#            letsee_ = letsee_.argmax(axis=1);
-#            plt.scatter(ALL_xp[:,0],ALL_xp[:,1],c=letsee_)
-#            plt.colorbar()            
-            plt.pause(0.01); 
+
             
 
         # |||||||||||| ----  PRINT ----- |||||||||||| 
@@ -579,7 +521,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
         #tmp = np.random.randint(len(reach100s), size=bts);
         #sess.run(train_step, feed_dict={states:reach100s[tmp,:-1],y:reach100s[tmp,-1,None],nu:nunu});
 
-    pickle.dump(ALL_PI,open( "policies4.pkl", "wb" ));
+    pickle.dump(ALL_PI,open( "policies6D_1.pkl", "wb" ));
 #    while True:
 #        state_get = input('State: ');
 #        if(state_get == 0):
@@ -588,7 +530,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
 #        print(str(VAL));
 
 num_ac = 2;
-layers1 = [5,20,20,2**num_ac];
+layers1 = [8,20,20,2**num_ac];
 t_hor = -0.25;
 
 main(layers1,t_hor,0,2000000,50000,0.001,0.95,99,5000,1.0,0);

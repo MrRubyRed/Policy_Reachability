@@ -23,9 +23,9 @@ def TransDef(scope=None, reuse=None, lsizes = None, depth=None, incl=None, cente
             lb.append(0.1*tf.Variable(tf.random_uniform([1,lsizes[i + 1]],-1.0,1.0,dtype=tf.float32),name="B"+str(i)));
             reg = reg + tf.reduce_sum(tf.abs(lw[-1])) + tf.reduce_sum(tf.abs(lb[-1]));
             
-        l.append(tf.nn.sigmoid(tf.add(tf.matmul(states,lw[0]), lb[0]),name="A"+str(0)))
+        l.append(tf.nn.relu(tf.add(tf.matmul(states,lw[0]), lb[0]),name="A"+str(0)))
         for i in xrange(len(lw)-2):
-            l.append(tf.nn.relu(tf.add(tf.sigmoid(l[-1],lw[i+1]), lb[i+1]),name="A"+str(i)));
+            l.append(tf.nn.relu(tf.add(tf.matmul(l[-1],lw[i+1]), lb[i+1]),name="A"+str(i)));
         
         last_ba = tf.add(tf.matmul(l[-1],lw[-1]), lb[-1],name="A_end");
         #l.append(tf.nn.sigmoid(last_ba));
