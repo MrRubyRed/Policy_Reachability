@@ -44,19 +44,19 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
 
     f = 1;
     Nx = 100*f + 1;
-    minn = [-5.0,-5.0,0.0,6.0];
-    maxx = [ 5.0, 5.0,2*np.pi,12.0];
+    minn = [-5.0,-10.0,-5.0,-10.0,0.0,-10.0];
+    maxx = [ 5.0, 10.0, 5.0, 10.0,2*np.pi, 10.0];
     
     X = np.linspace(minn[0],maxx[0],Nx);
-    Y = np.linspace(minn[1],maxx[1],Nx);
-    Z = np.linspace(minn[2],maxx[2],Nx);
+    Y = np.linspace(minn[2],maxx[2],Nx);
+    Z = np.linspace(minn[4],maxx[4],Nx);
     X_,Y_,Z_ = np.meshgrid(X, Y, Z);    
     X,Y = np.meshgrid(X, Y);
     XX = np.reshape(X,[-1,1]);
     YY = np.reshape(Y,[-1,1]);
     XX_ = np.reshape(X_,[-1,1]);
     YY_ = np.reshape(Y_,[-1,1]);
-    ZZ_ = np.reshape(Z_,[-1,1]); grid_check = np.concatenate((XX_,YY_,ZZ_,6.0*np.ones(XX_.shape)),axis=1);
+    ZZ_ = np.reshape(Z_,[-1,1]); grid_check = np.concatenate((XX_,np.ones(XX_.shape),YY_,np.ones(XX_.shape),ZZ_,np.zeros(XX_.shape)),axis=1);
     grid_eval = np.concatenate((XX,YY,0.0*np.ones(XX.shape),6.0*np.ones(XX.shape)),axis=1);
     grid_eval_ = np.concatenate((XX,YY,(2.0/3.0)*np.pi*np.ones(XX.shape),6.0*np.ones(XX.shape)),axis=1);
     grid_eval__ = np.concatenate((XX,YY,(4.0/3.0)*np.pi*np.ones(XX.shape),6.0*np.ones(XX.shape)),axis=1);
@@ -179,22 +179,22 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
         k1 = F(ALL_x,opt_a,opt_b);  #### !!!
         # ~~~~ Compute optimal input (k2)
         ALL_tmp = ALL_x + np.multiply(dtt/2.0,k1);
-        ALL_tmp[:,2] = p_corr(ALL_tmp[:,2]);
+        ALL_tmp[:,4] = p_corr(ALL_tmp[:,4]);
 
         k2 = F(ALL_tmp,opt_a,opt_b);  #### !!!
         # ~~~~ Compute optimal input (k3)
         ALL_tmp = ALL_x + np.multiply(dtt/2.0,k2);
-        ALL_tmp[:,2] = p_corr(ALL_tmp[:,2]);
+        ALL_tmp[:,4] = p_corr(ALL_tmp[:,4]);
 
         k3 = F(ALL_tmp,opt_a,opt_b);  #### !!!
         # ~~~~ Compute optimal input (k4)
         ALL_tmp = ALL_x + np.multiply(dtt,k3);
-        ALL_tmp[:,2] = p_corr(ALL_tmp[:,2]);
+        ALL_tmp[:,4] = p_corr(ALL_tmp[:,4]);
 
         k4 = F(ALL_tmp,opt_a,opt_b);  #### !!!
 
         Snx = ALL_x + np.multiply((dtt/6.0),(k1 + 2.0*k2 + 2.0*k3 + k4)); #np.multiply(dtt,k1)
-        Snx[:,2] = p_corr(Snx[:,2]);
+        Snx[:,4] = p_corr(Snx[:,4]);
         return Snx;
 
     perms = list(itertools.product([-1,1], repeat=num_ac))
@@ -250,8 +250,9 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
         values = np.min(compare_vals,axis=1,keepdims=True);             #Changed to MAX
         final_values = np.min((values,V_0(ALL_x[:,[0,2]])),axis=0)
         
-        values_ = V_0(next_states[:,[0,2]]); 
+        values_ = V_0(next_states[:,[0,2]]);
         compare_vals_ = values_.reshape([-1,ALL_x.shape[0]]).T;
+        index_best_a_ = compare_vals_.argmin(axis=1)
         values_ = np.min(compare_vals_,axis=1,keepdims=True);
         
         for ind in range(len(current_params)): #Reload pi*(x,t+dt) parameters
@@ -259,21 +260,21 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
             
         #return index_best_a,final_values
         if(ret_traj):
+            traj.append()
             return sess.run(make_hot,{hot_input:index_best_a}),values_,traj
         
-        return sess.run(make_hot,{hot_input:index_best_a}),values_#final_values 
+        #return sess.run(make_hot,{hot_input:index_best_a}),final_values 
+        return sess.run(make_hot,{hot_input:index_best_a_}),values_
 
     def ConvCosSin(ALL_x):
         sin_phi = np.sin(ALL_x[:,4,None])
-        cos_phi = np.cos(ALL_x[:,4,None])
-        sin_ome = np.sin(ALL_x[:,5,None])
-        cos_ome = np.cos(ALL_x[:,5,None])        
-        ret_val = np.concatenate((ALL_x[:,[0,1,2,3]],sin_phi,cos_phi,sin_ome,cos_ome),axis=1)
+        cos_phi = np.cos(ALL_x[:,4,None])     
+        ret_val = np.concatenate((ALL_x[:,[0,1,2,3,5]],sin_phi,cos_phi),axis=1)
         return ret_val
     # *****************************************************************************
     #
     # ============================= MAIN LOOP ====================================
-    #                     ( )    
+    #
     # *****************************************************************************
     t1 = time.time();
     t = 0.0;
@@ -295,16 +296,14 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
         
         if(np.mod(i,renew) == 0 and i is not 0):       
             
-#            fig = plt.figure(1)
-#            plt.clf();
-#            ax = fig.add_subplot(121, projection='3d')
-#            ax.scatter(mini_reach[:,0], mini_reach[:,1], mini_reach[:,2]);
-#            _,nn_vals = getPI(grid_check,ALL_PI)
-#            fi = (np.abs(nn_vals) < 0.05)
-#            mini_reach_ = grid_check[fi[:,0]]
-#            ax = fig.add_subplot(122, projection='3d')
-#            ax.scatter(mini_reach_[:,0], mini_reach_[:,1], mini_reach_[:,2]);            
-#            plt.pause(0.01);            
+            fig = plt.figure(1)
+            plt.clf();
+            _,nn_vals = getPI(grid_check,ALL_PI,False,10)
+            fi = (np.abs(nn_vals) < 0.05)
+            mini_reach_ = grid_check[fi[:,0]]
+            ax = fig.add_subplot(111, projection='3d')
+            ax.scatter(mini_reach_[:,0], mini_reach_[:,2], mini_reach_[:,4]);            
+            plt.pause(0.01);            
 #            
 #            plt.figure(3)
 #            d = 0.1
@@ -358,19 +357,19 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
             ALL_PI.insert(0,sess.run(theta))            
             
             k = 0;
-            ALL_x = np.random.uniform(-5.0,5.0,(nrolls,layers[0]-2));
-            ALL_x[:,1] = ALL_x[:,2]*2.0
+            ALL_x = np.random.uniform(-5.0,5.0,(nrolls,layers[0]-1));
+            ALL_x[:,1] = ALL_x[:,1]*2.0
             ALL_x[:,3] = ALL_x[:,3]*2.0
             ALL_x[:,4] = ALL_x[:,4]*np.pi/5.0 + np.pi;
-            ALL_x[:,5] = ALL_x[:,5]*np.pi/5.0 + np.pi;            
+            ALL_x[:,5] = ALL_x[:,5]*2.0;            
             PI,_ = getPI(ALL_x,ALL_PI);
             pre_ALL_x = ConvCosSin(ALL_x);
             
-            ALL_x_ = np.random.uniform(-5.0,5.0,(nrolls/100,layers[0]-2));
-            ALL_x_[:,1] = ALL_x_[:,2]*2.0
+            ALL_x_ = np.random.uniform(-5.0,5.0,(nrolls/100,layers[0]-1));
+            ALL_x_[:,1] = ALL_x_[:,1]*2.0
             ALL_x_[:,3] = ALL_x_[:,3]*2.0
             ALL_x_[:,4] = ALL_x_[:,4]*np.pi/5.0 + np.pi;
-            ALL_x_[:,5] = ALL_x_[:,5]*np.pi/5.0 + np.pi; 
+            ALL_x_[:,5] = ALL_x_[:,5]*2.0; 
             PI_,_ = getPI(ALL_x_,ALL_PI);
             pre_ALL_x_ = ConvCosSin(ALL_x_);
 
@@ -482,19 +481,19 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
         elif(np.mod(i,renew) == 0 and i is 0):
 
 #            sess.run(set_to_zero);
-            ALL_x = np.random.uniform(-5.0,5.0,(nrolls,layers[0]-2));
-            ALL_x[:,1] = ALL_x[:,2]*2.0
+            ALL_x = np.random.uniform(-5.0,5.0,(nrolls,layers[0]-1));
+            ALL_x[:,1] = ALL_x[:,1]*2.0
             ALL_x[:,3] = ALL_x[:,3]*2.0
             ALL_x[:,4] = ALL_x[:,4]*np.pi/5.0 + np.pi;
-            ALL_x[:,5] = ALL_x[:,5]*np.pi/5.0 + np.pi;            
+            ALL_x[:,5] = ALL_x[:,5]*2.0;            
             PI,_ = getPI(ALL_x);
             pre_ALL_x = ConvCosSin(ALL_x);
             
-            ALL_x_ = np.random.uniform(-5.0,5.0,(nrolls/100,layers[0]-2));
-            ALL_x_[:,1] = ALL_x_[:,2]*2.0
+            ALL_x_ = np.random.uniform(-5.0,5.0,(nrolls/100,layers[0]-1));
+            ALL_x_[:,1] = ALL_x_[:,1]*2.0
             ALL_x_[:,3] = ALL_x_[:,3]*2.0
             ALL_x_[:,4] = ALL_x_[:,4]*np.pi/5.0 + np.pi;
-            ALL_x_[:,5] = ALL_x_[:,5]*np.pi/5.0 + np.pi; 
+            ALL_x_[:,5] = ALL_x_[:,5]*2.0; 
             PI_,_ = getPI(ALL_x_);
             pre_ALL_x_ = ConvCosSin(ALL_x_);           
 #            sess.run(set_to_not_zero);
@@ -530,7 +529,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
 #        print(str(VAL));
 
 num_ac = 2;
-layers1 = [8,20,20,2**num_ac];
+layers1 = [7,20,20,2**num_ac];
 t_hor = -0.25;
 
-main(layers1,t_hor,0,2000000,50000,0.001,0.95,99,5000,1.0,0);
+main(layers1,t_hor,0,2000000,50000,0.001,0.95,99,5000,0.0,0);

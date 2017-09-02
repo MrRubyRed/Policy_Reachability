@@ -255,8 +255,9 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
         values = np.min(compare_vals,axis=1,keepdims=True);             #Changed to MAX
         final_values = np.min((values,V_0(ALL_x[:,[0,1]])),axis=0)
         
-        values_ = V_0(next_states[:,[0,1]]); 
+        values_ = V_0(next_states[:,[0,1]]);
         compare_vals_ = values_.reshape([-1,ALL_x.shape[0]]).T;
+        index_best_a_ = compare_vals_.argmin(axis=1)
         values_ = np.min(compare_vals_,axis=1,keepdims=True);
         
         for ind in range(len(current_params)): #Reload pi*(x,t+dt) parameters
@@ -265,8 +266,9 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
         #return index_best_a,final_values
         if(ret_traj):
             return sess.run(make_hot,{hot_input:index_best_a}),values_,traj
-        
-        return sess.run(make_hot,{hot_input:index_best_a}),values_#final_values 
+
+        #return sess.run(make_hot,{hot_input:index_best_a}),final_values 
+        return sess.run(make_hot,{hot_input:index_best_a_}),values_
 
 #    def getTraj(ALL_x,F_PI=[]): #Things to keep in MIND: You want the returned value to be the minimum accross a trajectory.
 #
@@ -620,7 +622,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
 #        print(str(VAL));
 
 num_ac = 2;
-layers1 = [5,60,2**num_ac]; #[5,20,20,20,2**num_ac],[5,30,25,2**num_ac],[5,20,20,2**num_ac],[5,50,50,2**num_ac],[5,50,50,2**num_ac]
+layers1 = [5,20,20,2**num_ac]; #[5,20,20,20,2**num_ac],[5,30,25,2**num_ac],[5,20,20,2**num_ac],[5,50,50,2**num_ac],[5,50,50,2**num_ac]
 t_hor = -0.25;
 
-main(layers1,t_hor,0,2000000,50000,0.001,0.95,99,5000,0.0,0);
+main(layers1,t_hor,0,2000000,50000,0.001,0.95,99,5000,1.0,0);
