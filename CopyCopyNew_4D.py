@@ -240,10 +240,10 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
         for params in F_PI:
             for ind in range(len(params)): #Reload pi*(x,t+dt) parameters
                 sess.run(theta[ind].assign(params[ind]));
-            
+
+            hots = sess.run(Tt,{states:ConvCosSin(next_states)});
+            opt_a = Hot_to_Cold(hots,true_ac_list)            
             for _ in range(subSamples):
-                hots = sess.run(Tt,{states:ConvCosSin(next_states)});
-                opt_a = Hot_to_Cold(hots,true_ac_list)
                 next_states = RK4(next_states,dt/float(subSamples),opt_a,None);
                 if(ret_traj): traj.append(next_states);
                 values = np.min((values,V_0(next_states[:,[0,1]])),axis=0);      
@@ -272,19 +272,21 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
         
         next_states = ALL_x;
         traj = [next_states];
+        actions = [];
               
         for params in F_PI:
             for ind in range(len(params)): #Reload pi*(x,t+dt) parameters
                 sess.run(theta[ind].assign(params[ind]));
-            
+
+            hots = sess.run(Tt,{states:ConvCosSin(next_states)});
+            opt_a = Hot_to_Cold(hots,true_ac_list)            
             for _ in range(subSamples):
-                hots = sess.run(Tt,{states:ConvCosSin(next_states)});
-                opt_a = Hot_to_Cold(hots,true_ac_list)
                 next_states = RK4(next_states,dt/float(subSamples),opt_a,None);
                 traj.append(next_states);
+                actions.append(hots.argmax(axis=1)[0]);
                 #values = np.min((values,V_0(next_states[:,[0,1]])),axis=0);    
                         
-        return traj,V_0(next_states[:,[0,1]]); 
+        return traj,V_0(next_states[:,[0,1]]),actions; 
 
     def ConvCosSin(ALL_x):
         sin_phi = np.sin(ALL_x[:,2,None])
@@ -309,10 +311,12 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
     while (imp == 1.0):
         state_get = input('State: ');
         sub_smpl = input('SUBSAMPLING: ');
-        traj,VAL = getTraj(state_get,ALL_PI,sub_smpl);
+        pause_len = input('Pause: ')
+        traj,VAL,act = getTraj(state_get,ALL_PI,sub_smpl);
+        act.append(act[-1]);
         all_to = np.concatenate(traj);
-        plt.plot(all_to[:,[0]],all_to[:,[1]])
-        plt.pause(0.25)
+        plt.scatter(all_to[:,[0]],all_to[:,[1]],c=act)
+        plt.pause(pause_len)
         print(str(VAL));
 #        print(str(traj));
     

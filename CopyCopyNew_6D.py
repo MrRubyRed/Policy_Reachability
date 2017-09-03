@@ -234,10 +234,10 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
         for params in F_PI:
             for ind in range(len(params)): #Reload pi*(x,t+dt) parameters
                 sess.run(theta[ind].assign(params[ind]));
-            
+
+            hots = sess.run(Tt,{states:ConvCosSin(next_states)});
+            opt_a = Hot_to_Cold(hots,true_ac_list)            
             for _ in range(subSamples):
-                hots = sess.run(Tt,{states:ConvCosSin(next_states)});
-                opt_a = Hot_to_Cold(hots,true_ac_list)
                 next_states = RK4(next_states,dt/float(subSamples),opt_a,None);
                 if(ret_traj): traj.append(next_states);
                 values = np.min((values,V_0(next_states[:,[0,2]])),axis=0);      
@@ -266,19 +266,21 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
         
         next_states = ALL_x;
         traj = [next_states];
+        actions = [];
               
         for params in F_PI:
             for ind in range(len(params)): #Reload pi*(x,t+dt) parameters
                 sess.run(theta[ind].assign(params[ind]));
             
+            hots = sess.run(Tt,{states:ConvCosSin(next_states)});
+            opt_a = Hot_to_Cold(hots,true_ac_list)
             for _ in range(subSamples):
-                hots = sess.run(Tt,{states:ConvCosSin(next_states)});
-                opt_a = Hot_to_Cold(hots,true_ac_list)
                 next_states = RK4(next_states,dt/float(subSamples),opt_a,None);
                 traj.append(next_states);
+                actions.append(hots.argmax(axis=1)[0]);
                 #values = np.min((values,V_0(next_states[:,[0,1]])),axis=0);    
                         
-        return traj,V_0(next_states[:,[0,2]]); 
+        return traj,V_0(next_states[:,[0,2]]),actions; 
 
     def ConvCosSin(ALL_x):
         sin_phi = np.sin(ALL_x[:,4,None])
@@ -298,14 +300,16 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
     nunu = lr_schedule.value(k);
     
     if(imp == 1.0):
-        ALL_PI = pickle.load( open( "policies6D_2.pkl", "rb" ) );
+        ALL_PI = pickle.load( open( "policies6D_h30_h30_h30.pkl", "rb" ) );
     while (imp == 1.0):
         state_get = input('State: ');
         sub_smpl = input('SUBSAMPLING: ');
-        traj,VAL = getTraj(state_get,ALL_PI,sub_smpl);
+        pause_len = input('Pause: ')
+        traj,VAL,act = getTraj(state_get,ALL_PI,sub_smpl);
+        act.append(act[-1]);
         all_to = np.concatenate(traj);
-        plt.plot(all_to[:,[0]],all_to[:,[2]])
-        plt.pause(0.25)
+        plt.scatter(all_to[:,[0]],all_to[:,[2]],c=act)
+        plt.pause(pause_len)
         print(str(VAL));
 #        print(str(traj));
     
@@ -537,7 +541,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
         #tmp = np.random.randint(len(reach100s), size=bts);
         #sess.run(train_step, feed_dict={states:reach100s[tmp,:-1],y:reach100s[tmp,-1,None],nu:nunu});
 
-    pickle.dump(ALL_PI,open( "policies6D_3.pkl", "wb" ));
+    pickle.dump(ALL_PI,open( "policies6D_h30_h30_h30.pkl", "wb" ));
 #    while True:
 #        state_get = input('State: ');
 #        if(state_get == 0):
@@ -546,7 +550,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
 #        print(str(VAL));
 
 num_ac = 2;
-layers1 = [7,20,20,2**num_ac];
+layers1 = [7,30,30,30,2**num_ac];
 t_hor = -0.25;
 
 main(layers1,t_hor,0,2000000,50000,0.001,0.95,99,5000,1.0,0);
