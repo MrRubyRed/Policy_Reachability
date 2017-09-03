@@ -203,10 +203,11 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
         return Snx;
 
     perms = list(itertools.product([-1,1], repeat=num_ac))
-#    for i in range(len(perms)): #2**num_actions
-#        ac_tuple = perms[i];
-#        ac_list = [tmp1*tmp2 for tmp1,tmp2 in zip(ac_tuple,max_list)]; #ASSUMING: aMax = -aMin
-#        true_ac_list.append(ac_list);
+    true_ac_list = [];
+    for i in range(len(perms)): #2**num_actions
+        ac_tuple = perms[i];
+        ac_list = [tmp1*tmp2 for tmp1,tmp2 in zip(ac_tuple,max_list)]; #ASSUMING: aMax = -aMin
+        true_ac_list.append(ac_list);
     
     def Hot_to_Cold(hots,ac_list):
         a = hots.argmax(axis=1);
@@ -226,12 +227,9 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
         if(ret_traj): traj = [];
         #perms = list(itertools.product([-1,1], repeat=num_ac))
         next_states = [];
-        true_ac_list = [];
-        for i in range(len(perms)): #2**num_actions
-            ac_tuple = perms[i];
-            ac_list = [np.float(tmp1)*tmp2 for tmp1,tmp2 in zip(ac_tuple,max_list)]; #ASSUMING: aMax = -aMin
-            true_ac_list.append(ac_list);
-            opt_a = np.asarray(ac_list)*np.ones([ALL_x.shape[0],1]);
+        
+        for i in range(len(perms)):
+            opt_a = np.asarray(true_ac_list[i])*np.ones([ALL_x.shape[0],1]);
             Snx = ALL_x;
             for _ in range(subSamples): Snx = RK4(Snx,dt/float(subSamples),opt_a,None);
             next_states.append(Snx);
@@ -265,36 +263,28 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
             
         #return index_best_a,final_values
         if(ret_traj):
-            return sess.run(make_hot,{hot_input:index_best_a}),values_,traj
+            return sess.run(make_hot,{hot_input:index_best_a_}),values_,traj
 
         #return sess.run(make_hot,{hot_input:index_best_a}),final_values 
         return sess.run(make_hot,{hot_input:index_best_a_}),values_
 
-#    def getTraj(ALL_x,F_PI=[]): #Things to keep in MIND: You want the returned value to be the minimum accross a trajectory.
-#
-#        current_params = sess.run(theta);
-#
-#        next_states = [ALL_x]
-#        true_ac_list = [];
-#        for i in range(len(perms)): #2**num_actions
-#            ac_tuple = perms[i];
-#            ac_list = [tmp1*tmp2 for tmp1,tmp2 in zip(ac_tuple,max_list)]; #ASSUMING: aMax = -aMin
-#            true_ac_list.append(ac_list);
-#      
-#        
-#        for params in F_PI:
-#            for ind in range(len(params)): #Reload pi*(x,t+dt) parameters
-#                sess.run(theta[ind].assign(params[ind]));
-#            
-#            
-#            hots = sess.run(Tt,{states:next_states[-1]});
-#            opt_a = Hot_to_Cold(hots,true_ac_list)
-#            next_states.append(RK4(next_states[-1],dt,opt_a,None));
-#
-#        for ind in range(len(current_params)): #Reload pi*(x,t+dt) parameters
-#            sess.run(theta[ind].assign(current_params[ind]));         
-#                        
-#        return next_states 
+    def getTraj(ALL_x,F_PI=[],subSamples=1):
+        
+        next_states = ALL_x;
+        traj = [next_states];
+              
+        for params in F_PI:
+            for ind in range(len(params)): #Reload pi*(x,t+dt) parameters
+                sess.run(theta[ind].assign(params[ind]));
+            
+            for _ in range(subSamples):
+                hots = sess.run(Tt,{states:ConvCosSin(next_states)});
+                opt_a = Hot_to_Cold(hots,true_ac_list)
+                next_states = RK4(next_states,dt/float(subSamples),opt_a,None);
+                traj.append(next_states);
+                #values = np.min((values,V_0(next_states[:,[0,1]])),axis=0);    
+                        
+        return traj,V_0(next_states[:,[0,1]]); 
 
     def ConvCosSin(ALL_x):
         sin_phi = np.sin(ALL_x[:,2,None])
@@ -319,7 +309,10 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
     while (imp == 1.0):
         state_get = input('State: ');
         sub_smpl = input('SUBSAMPLING: ');
-        _,VAL,traj = getPI(state_get,ALL_PI,True,sub_smpl);
+        traj,VAL = getTraj(state_get,ALL_PI,sub_smpl);
+        all_to = np.concatenate(traj);
+        plt.plot(all_to[:,[0]],all_to[:,[1]])
+        plt.pause(0.25)
         print(str(VAL));
 #        print(str(traj));
     

@@ -198,10 +198,11 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
         return Snx;
 
     perms = list(itertools.product([-1,1], repeat=num_ac))
-#    for i in range(len(perms)): #2**num_actions
-#        ac_tuple = perms[i];
-#        ac_list = [tmp1*tmp2 for tmp1,tmp2 in zip(ac_tuple,max_list)]; #ASSUMING: aMax = -aMin
-#        true_ac_list.append(ac_list);
+    true_ac_list = [];
+    for i in range(len(perms)): #2**num_actions
+        ac_tuple = perms[i];
+        ac_list = [(tmp1==1)*tmp2 for tmp1,tmp2 in zip(ac_tuple,max_list)]; #ASSUMING: aMax = -aMin
+        true_ac_list.append(ac_list);
     
     def Hot_to_Cold(hots,ac_list):
         a = hots.argmax(axis=1);
@@ -221,12 +222,8 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
         if(ret_traj): traj = [];
         #perms = list(itertools.product([-1,1], repeat=num_ac))
         next_states = [];
-        true_ac_list = [];
-        for i in range(len(perms)): #2**num_actions
-            ac_tuple = perms[i];
-            ac_list = [(tmp1==1)*tmp2 for tmp1,tmp2 in zip(ac_tuple,max_list)]; #ASSUMING: aMax = -aMin
-            true_ac_list.append(ac_list);
-            opt_a = np.asarray(ac_list)*np.ones([ALL_x.shape[0],1]);
+        for i in range(len(perms)):
+            opt_a = np.asarray(true_ac_list[i])*np.ones([ALL_x.shape[0],1]);
             Snx = ALL_x;
             for _ in range(subSamples): Snx = RK4(Snx,dt/float(subSamples),opt_a,None);
             next_states.append(Snx);
@@ -260,11 +257,28 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
             
         #return index_best_a,final_values
         if(ret_traj):
-            traj.append()
-            return sess.run(make_hot,{hot_input:index_best_a}),values_,traj
+            return sess.run(make_hot,{hot_input:index_best_a_}),values_,traj
         
         #return sess.run(make_hot,{hot_input:index_best_a}),final_values 
         return sess.run(make_hot,{hot_input:index_best_a_}),values_
+
+    def getTraj(ALL_x,F_PI=[],subSamples=1):
+        
+        next_states = ALL_x;
+        traj = [next_states];
+              
+        for params in F_PI:
+            for ind in range(len(params)): #Reload pi*(x,t+dt) parameters
+                sess.run(theta[ind].assign(params[ind]));
+            
+            for _ in range(subSamples):
+                hots = sess.run(Tt,{states:ConvCosSin(next_states)});
+                opt_a = Hot_to_Cold(hots,true_ac_list)
+                next_states = RK4(next_states,dt/float(subSamples),opt_a,None);
+                traj.append(next_states);
+                #values = np.min((values,V_0(next_states[:,[0,1]])),axis=0);    
+                        
+        return traj,V_0(next_states[:,[0,2]]); 
 
     def ConvCosSin(ALL_x):
         sin_phi = np.sin(ALL_x[:,4,None])
@@ -284,11 +298,14 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
     nunu = lr_schedule.value(k);
     
     if(imp == 1.0):
-        ALL_PI = pickle.load( open( "policies6D_1.pkl", "rb" ) );
+        ALL_PI = pickle.load( open( "policies6D_2.pkl", "rb" ) );
     while (imp == 1.0):
         state_get = input('State: ');
         sub_smpl = input('SUBSAMPLING: ');
-        _,VAL,traj = getPI(state_get,ALL_PI,True,sub_smpl);
+        traj,VAL = getTraj(state_get,ALL_PI,sub_smpl);
+        all_to = np.concatenate(traj);
+        plt.plot(all_to[:,[0]],all_to[:,[2]])
+        plt.pause(0.25)
         print(str(VAL));
 #        print(str(traj));
     
@@ -520,7 +537,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
         #tmp = np.random.randint(len(reach100s), size=bts);
         #sess.run(train_step, feed_dict={states:reach100s[tmp,:-1],y:reach100s[tmp,-1,None],nu:nunu});
 
-    pickle.dump(ALL_PI,open( "policies6D_1.pkl", "wb" ));
+    pickle.dump(ALL_PI,open( "policies6D_3.pkl", "wb" ));
 #    while True:
 #        state_get = input('State: ');
 #        if(state_get == 0):
@@ -532,4 +549,4 @@ num_ac = 2;
 layers1 = [7,20,20,2**num_ac];
 t_hor = -0.25;
 
-main(layers1,t_hor,0,2000000,50000,0.001,0.95,99,5000,0.0,0);
+main(layers1,t_hor,0,2000000,50000,0.001,0.95,99,5000,1.0,0);
