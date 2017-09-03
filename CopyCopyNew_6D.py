@@ -215,11 +215,10 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
         ALL_x[:,[3]] = (ALL_x[:,[3]] - 9.0)/3.0
         return ALL_x
     
-    def getPI(ALL_x,F_PI=[],ret_traj=False,subSamples=1): #Things to keep in MIND: You want the returned value to be the minimum accross a trajectory.
+    def getPI(ALL_x,F_PI=[],subSamples=1): #Things to keep in MIND: You want the returned value to be the minimum accross a trajectory.
 
         current_params = sess.run(theta);
-        
-        if(ret_traj): traj = [];
+
         #perms = list(itertools.product([-1,1], repeat=num_ac))
         next_states = [];
         for i in range(len(perms)):
@@ -228,8 +227,6 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
             for _ in range(subSamples): Snx = RK4(Snx,dt/float(subSamples),opt_a,None);
             next_states.append(Snx);
         next_states = np.concatenate(next_states,axis=0);
-        if(ret_traj): traj.append(next_states);
-        values = V_0(next_states[:,[0,2]]);
         
         for params in F_PI:
             for ind in range(len(params)): #Reload pi*(x,t+dt) parameters
@@ -239,27 +236,15 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
             opt_a = Hot_to_Cold(hots,true_ac_list)            
             for _ in range(subSamples):
                 next_states = RK4(next_states,dt/float(subSamples),opt_a,None);
-                if(ret_traj): traj.append(next_states);
-                values = np.min((values,V_0(next_states[:,[0,2]])),axis=0);      
-            
-        compare_vals = values.reshape([-1,ALL_x.shape[0]]).T
-        index_best_a = compare_vals.argmin(axis=1)#.reshape([-1,1]);    #Changed to ARGMAX
-        values = np.min(compare_vals,axis=1,keepdims=True);             #Changed to MAX
-        final_values = np.min((values,V_0(ALL_x[:,[0,2]])),axis=0)
         
         values_ = V_0(next_states[:,[0,2]]);
         compare_vals_ = values_.reshape([-1,ALL_x.shape[0]]).T;
-        index_best_a_ = compare_vals_.argmin(axis=1)
-        values_ = np.min(compare_vals_,axis=1,keepdims=True);
+        index_best_a_ = compare_vals_.argmax(axis=1)                    #Changed to ARGMAX
+        values_ = np.max(compare_vals_,axis=1,keepdims=True);
         
         for ind in range(len(current_params)): #Reload pi*(x,t+dt) parameters
-            sess.run(theta[ind].assign(current_params[ind]));         
-            
-        #return index_best_a,final_values
-        if(ret_traj):
-            return sess.run(make_hot,{hot_input:index_best_a_}),values_,traj
+            sess.run(theta[ind].assign(current_params[ind]));
         
-        #return sess.run(make_hot,{hot_input:index_best_a}),final_values 
         return sess.run(make_hot,{hot_input:index_best_a_}),values_
 
     def getTraj(ALL_x,F_PI=[],subSamples=1):
@@ -300,7 +285,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
     nunu = lr_schedule.value(k);
     
     if(imp == 1.0):
-        ALL_PI = pickle.load( open( "policies6D_h30_h30_h30.pkl", "rb" ) );
+        ALL_PI = pickle.load( open( "policies6D_h30_h30.pkl", "rb" ) );
     while (imp == 1.0):
         state_get = input('State: ');
         sub_smpl = input('SUBSAMPLING: ');
@@ -541,7 +526,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
         #tmp = np.random.randint(len(reach100s), size=bts);
         #sess.run(train_step, feed_dict={states:reach100s[tmp,:-1],y:reach100s[tmp,-1,None],nu:nunu});
 
-    pickle.dump(ALL_PI,open( "policies6D_h30_h30_h30.pkl", "wb" ));
+    pickle.dump(ALL_PI,open( "policies6D_h30_h30.pkl", "wb" ));
 #    while True:
 #        state_get = input('State: ');
 #        if(state_get == 0):
@@ -550,7 +535,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
 #        print(str(VAL));
 
 num_ac = 2;
-layers1 = [7,30,30,30,2**num_ac];
+layers1 = [7,30,30,2**num_ac];
 t_hor = -0.25;
 
-main(layers1,t_hor,0,2000000,50000,0.001,0.95,99,5000,1.0,0);
+main(layers1,t_hor,0,2000000,50000,0.001,0.95,99,5000,0.0,0);
