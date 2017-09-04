@@ -304,7 +304,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
             
             fig = plt.figure(1)
             plt.clf();
-            _,nn_vals,_ = getTraj(grid_check,ALL_PI,10)
+            _,nn_vals,_ = getTraj(grid_check,ALL_PI,20)
             fi = (np.abs(nn_vals) < 0.05)
             mini_reach_ = grid_check[fi[:,0]]
             ax = fig.add_subplot(111, projection='3d')
@@ -368,7 +368,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
             ALL_x[:,3] = ALL_x[:,3]*2.0
             ALL_x[:,4] = ALL_x[:,4]*np.pi/5.0 + np.pi;
             ALL_x[:,5] = ALL_x[:,5]*2.0;            
-            PI,_ = getPI(ALL_x,ALL_PI);
+            PI,_ = getPI(ALL_x,ALL_PI,subSamples=20);
             pre_ALL_x = ConvCosSin(ALL_x);
             
             ALL_x_ = np.random.uniform(-5.0,5.0,(nrolls/100,layers[0]-1));
@@ -376,7 +376,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
             ALL_x_[:,3] = ALL_x_[:,3]*2.0
             ALL_x_[:,4] = ALL_x_[:,4]*np.pi/5.0 + np.pi;
             ALL_x_[:,5] = ALL_x_[:,5]*2.0; 
-            PI_,_ = getPI(ALL_x_,ALL_PI);
+            PI_,_ = getPI(ALL_x_,ALL_PI,subSamples=20);
             pre_ALL_x_ = ConvCosSin(ALL_x_);
 
 #            tmp = np.random.randint(len(reach100s[:,:-1]), size=12000);
@@ -492,7 +492,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
             ALL_x[:,3] = ALL_x[:,3]*2.0
             ALL_x[:,4] = ALL_x[:,4]*np.pi/5.0 + np.pi;
             ALL_x[:,5] = ALL_x[:,5]*2.0;            
-            PI,_ = getPI(ALL_x);
+            PI,_ = getPI(ALL_x,subSamples=20);
             pre_ALL_x = ConvCosSin(ALL_x);
             
             ALL_x_ = np.random.uniform(-5.0,5.0,(nrolls/100,layers[0]-1));
@@ -500,7 +500,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
             ALL_x_[:,3] = ALL_x_[:,3]*2.0
             ALL_x_[:,4] = ALL_x_[:,4]*np.pi/5.0 + np.pi;
             ALL_x_[:,5] = ALL_x_[:,5]*2.0; 
-            PI_,_ = getPI(ALL_x_);
+            PI_,_ = getPI(ALL_x_,subSamples=20);
             pre_ALL_x_ = ConvCosSin(ALL_x_);           
 #            sess.run(set_to_not_zero);
 
@@ -535,7 +535,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
 #        print(str(VAL));
 
 num_ac = 2;
-layers1 = [7,30,30,2**num_ac];
+layers1 = [7,50,50,2**num_ac];
 t_hor = -0.25;
 
 main(layers1,t_hor,0,2000000,50000,0.001,0.95,99,5000,0.0,0);
