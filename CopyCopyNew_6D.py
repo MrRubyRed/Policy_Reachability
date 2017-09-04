@@ -304,12 +304,12 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
             
             fig = plt.figure(1)
             plt.clf();
-            _,nn_vals = getPI(grid_check,ALL_PI,False,10)
+            _,nn_vals,_ = getTraj(grid_check,ALL_PI,10)
             fi = (np.abs(nn_vals) < 0.05)
             mini_reach_ = grid_check[fi[:,0]]
             ax = fig.add_subplot(111, projection='3d')
             ax.scatter(mini_reach_[:,0], mini_reach_[:,2], mini_reach_[:,4]);            
-            plt.pause(0.01);            
+            plt.pause(0.25);            
 #            
 #            plt.figure(3)
 #            d = 0.1
