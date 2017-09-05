@@ -269,6 +269,8 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
         return sess.run(make_hot,{hot_input:index_best_a_}),values_
 
     def getTraj(ALL_x,F_PI=[],subSamples=1):
+
+        current_params = sess.run(theta);
         
         next_states = ALL_x;
         traj = [next_states];
@@ -285,6 +287,9 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
                 traj.append(next_states);
                 actions.append(hots.argmax(axis=1)[0]);
                 #values = np.min((values,V_0(next_states[:,[0,1]])),axis=0);    
+
+        for ind in range(len(current_params)): #Reload pi*(x,t+dt) parameters
+            sess.run(theta[ind].assign(current_params[ind]));
                         
         return traj,V_0(next_states[:,[0,1]]),actions; 
 
@@ -323,6 +328,8 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
     for i in xrange(iters):
         
         if(np.mod(i,renew) == 0 and i is not 0):       
+
+            ALL_PI.insert(0,sess.run(theta)) 
             
 #            plt.figure(1)
 #            plt.clf();
@@ -394,8 +401,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
             plt.scatter(ALL_xp[:,0],ALL_xp[:,1],c=letsee_)
             plt.colorbar()            
             plt.pause(0.01);            
-            
-            ALL_PI.insert(0,sess.run(theta))            
+                      
             
             k = 0;
             ALL_x = np.random.uniform(-6.0,6.0,(nrolls,layers[0]-1));
