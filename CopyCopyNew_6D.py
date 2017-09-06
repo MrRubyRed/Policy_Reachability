@@ -242,7 +242,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
         
         return sess.run(make_hot,{hot_input:index_best_a_}),values_
 
-    def getTraj(ALL_x,F_PI=[],subSamples=1):
+    def getTraj(ALL_x,F_PI=[],subSamples=1,Noise = False):
 
         current_params = sess.run(theta);
         
@@ -258,6 +258,8 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
             opt_a = Hot_to_Cold(hots,true_ac_list)
             for _ in range(subSamples):
                 next_states = RK4(next_states,dt/float(subSamples),opt_a,None);
+                if Noise:
+                    next_states = next_states + np.random.normal(size=next_states.shape)*0.01
                 traj.append(next_states);
                 actions.append(hots.argmax(axis=1)[0]);
                 #values = np.min((values,V_0(next_states[:,[0,1]])),axis=0);    
@@ -269,8 +271,11 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
 
     def ConvCosSin(ALL_x):
         sin_phi = np.sin(ALL_x[:,4,None])
-        cos_phi = np.cos(ALL_x[:,4,None])     
-        ret_val = np.concatenate((ALL_x[:,[0,1,2,3,5]],sin_phi,cos_phi),axis=1)
+        cos_phi = np.cos(ALL_x[:,4,None])
+        pos = ALL_x[:,[0,2]]/5.0;
+        vel = ALL_x[:,[1,3]]/10.0;
+        arate = ALL_x[:,[5]]/30.0;
+        ret_val = np.concatenate((pos,vel,arate,sin_phi,cos_phi),axis=1)
         return ret_val
     # *****************************************************************************
     #
@@ -285,15 +290,16 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
     nunu = lr_schedule.value(k);
     
     if(imp == 1.0):
-        ALL_PI = pickle.load( open( "policies6D_h30_h30.pkl", "rb" ) );
+        ALL_PI = pickle.load( open( "policies6D_h40_h40.pkl", "rb" ) );
     while (imp == 1.0):
         state_get = input('State: ');
         sub_smpl = input('SUBSAMPLING: ');
         pause_len = input('Pause: ')
-        traj,VAL,act = getTraj(state_get,ALL_PI,sub_smpl);
+        traj,VAL,act = getTraj(state_get,F_PI=ALL_PI,subSamples=sub_smpl,Noise=False);
         act.append(act[-1]);
         all_to = np.concatenate(traj);
         plt.scatter(all_to[:,[0]],all_to[:,[2]],c=act)
+        #plt.colorbar()
         plt.pause(pause_len)
         print(str(VAL));
 #        print(str(traj));
@@ -304,16 +310,16 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
             
             ALL_PI.insert(0,sess.run(theta))            
             
-#            fig = plt.figure(1)
-#            plt.clf();
-#            _,nn_vals,_ = getTraj(grid_check,ALL_PI,20)
-#            fi = (np.abs(nn_vals) < 0.05)
-#            mini_reach_ = grid_check[fi[:,0]]
-#            ax = fig.add_subplot(111, projection='3d')
-#            ax.scatter(mini_reach_[:,0], mini_reach_[:,2], mini_reach_[:,4]);            
-#            plt.pause(0.25);            
+            fig = plt.figure(1)
+            plt.clf();
+            _,nn_vals,_ = getTraj(grid_check,ALL_PI,20)
+            fi = (np.abs(nn_vals) < 0.05)
+            mini_reach_ = grid_check[fi[:,0]]
+            ax = fig.add_subplot(111, projection='3d')
+            ax.scatter(mini_reach_[:,0], mini_reach_[:,2], mini_reach_[:,4]);            
+            plt.pause(0.25);            
 
-            plt.figure(2)
+            plt.figure(2) #TODO: Figure out why facing up vs facing down has same action...
             plt.clf();
             ALL_xx = np.array([[0.0,0.0,1.0,0.0,0.0,0.0],
                                [0.0,0.0,1.0,0.0,np.pi/4,0.0],
@@ -322,7 +328,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
                                [0.0,0.0,1.0,0.0,np.pi/2 + 0.7,0.0],
                                [0.0,0.0,1.0,0.0,np.pi,0.0]]);
             for tmmp in range(ALL_xx.shape[0]):                   
-                traj,_,act = getTraj(ALL_xx[[tmmp],:],ALL_PI,10);
+                traj,_,act = getTraj(ALL_xx[[tmmp],:],F_PI=ALL_PI,subSamples=10);
                 act.append(act[-1]);
                 all_to = np.concatenate(traj);
                 plt.scatter(all_to[:,[0]],all_to[:,[2]],c=act);                   
@@ -395,7 +401,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
             ALL_x[:,1] = ALL_x[:,1]*2.0
             ALL_x[:,3] = ALL_x[:,3]*2.0
             ALL_x[:,4] = ALL_x[:,4]*np.pi/5.0 + np.pi;
-            ALL_x[:,5] = ALL_x[:,5]*2.0;            
+            ALL_x[:,5] = ALL_x[:,5]*6.0;  
             PI,_ = getPI(ALL_x,ALL_PI,subSamples=3);
             pre_ALL_x = ConvCosSin(ALL_x);
             
@@ -403,7 +409,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
             ALL_x_[:,1] = ALL_x_[:,1]*2.0
             ALL_x_[:,3] = ALL_x_[:,3]*2.0
             ALL_x_[:,4] = ALL_x_[:,4]*np.pi/5.0 + np.pi;
-            ALL_x_[:,5] = ALL_x_[:,5]*2.0; 
+            ALL_x_[:,5] = ALL_x_[:,5]*6.0; 
             PI_,_ = getPI(ALL_x_,ALL_PI,subSamples=3);
             pre_ALL_x_ = ConvCosSin(ALL_x_);
 
@@ -520,8 +526,8 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
             ALL_x[:,1] = ALL_x[:,1]*2.0
             ALL_x[:,3] = ALL_x[:,3]*2.0
             ALL_x[:,4] = ALL_x[:,4]*np.pi/5.0 + np.pi;
-            ALL_x[:,5] = ALL_x[:,5]*2.0;            
-            PI,_ = getPI(ALL_x,[],subSamples=3);
+            ALL_x[:,5] = ALL_x[:,5]*6.0;            
+            PI,_ = getPI(ALL_x,F_PI=[],subSamples=3);
             pre_ALL_x = ConvCosSin(ALL_x);
             elapsed = time.time() - t
             print("Compute Data Time = "+str(elapsed))
@@ -530,8 +536,8 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
             ALL_x_[:,1] = ALL_x_[:,1]*2.0
             ALL_x_[:,3] = ALL_x_[:,3]*2.0
             ALL_x_[:,4] = ALL_x_[:,4]*np.pi/5.0 + np.pi;
-            ALL_x_[:,5] = ALL_x_[:,5]*2.0; 
-            PI_,_ = getPI(ALL_x_,[],subSamples=3);
+            ALL_x_[:,5] = ALL_x_[:,5]*6.0; 
+            PI_,_ = getPI(ALL_x_,F_PI=[],subSamples=3);
             pre_ALL_x_ = ConvCosSin(ALL_x_);           
 #            sess.run(set_to_not_zero);
 
@@ -557,7 +563,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
         #tmp = np.random.randint(len(reach100s), size=bts);
         #sess.run(train_step, feed_dict={states:reach100s[tmp,:-1],y:reach100s[tmp,-1,None],nu:nunu});
 
-    pickle.dump(ALL_PI,open( "policies6D_h30_h30.pkl", "wb" ));
+    pickle.dump(ALL_PI,open( "policies6D_h20_h20.pkl", "wb" ));
 #    while True:
 #        state_get = input('State: ');
 #        if(state_get == 0):
@@ -566,7 +572,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
 #        print(str(VAL));
 
 num_ac = 2;
-layers1 = [7,30,30,2**num_ac];
-t_hor = -0.25;
+layers1 = [7,40,40,2**num_ac];
+t_hor = -0.5;
 
 main(layers1,t_hor,0,2000000,50000,0.001,0.95,99,5000,1.0,0);
