@@ -15,6 +15,7 @@ import numpy as np
 import tensorflow as tf
 import itertools
 from FAuxFuncs3_0 import TransDef
+from FAuxFuncs4_0 import TransDef_
 import matplotlib.pyplot as plt
 import scipy.io as sio
 import pickle
@@ -83,7 +84,8 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
     num_ac = 2;
     iters = int(np.abs(t_hor)/dt)*renew + 1; 
     ##################### INSTANTIATIONS #################
-    states,y,Tt,L,l_r,lb,reg, cross_entropy = TransDef("Critic",False,layers,depth,incl,center);
+    states,y,Tt,L,l_r,lb,reg, cross_entropy = TransDef("Actor",False,layers,depth,incl,center);
+    states_,y_,Tt_,L_,l_r_,lb_,reg_, cross_entropy = TransDef("Critic",False,layers,depth,incl,center);    
     ola1 = tf.argmax(Tt,dimension=1)
     ola2 = tf.argmax(y,dimension=1)
     ola3 = tf.equal(ola1,ola2)
@@ -93,7 +95,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
     #states_,y_,Tt_,l_r_,lb_,reg_ = TransDef("Actor",False,a_layers,depth,incl,center,outp=True);
     
     V_func_vars = tf.get_collection(tf.GraphKeys.VARIABLES, scope='Critic');
-    #A_func_vars = tf.get_collection(tf.GraphKeys.VARIABLES, scope='Actor');
+    A_func_vars = tf.get_collection(tf.GraphKeys.VARIABLES, scope='Actor');
     
     #var_grad = tf.gradients(Tt_,states_)[0]
     var_grad_ = tf.gradients(Tt,states)[0]
@@ -235,19 +237,14 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
                 values = np.min((values,V_0(next_states[:,[0,2]])),axis=0);
         
         values_ = V_0(next_states[:,[0,2]]);
-        compare_vals_ = values_.reshape([-1,ALL_x.shape[0]]).T;         #Changed to values instead of values_
+        compare_vals_ = values.reshape([-1,ALL_x.shape[0]]).T;         #Changed to values instead of values_
         index_best_a_ = compare_vals_.argmin(axis=1)                    #Changed to ARGMIN
         values_ = np.min(compare_vals_,axis=1,keepdims=True);
-        
-        filterr = np.max(compare_vals_,axis=1) > -0.8
-        index_best_a_ = index_best_a_[filterr]
-        values_ = values_[filterr]
-        print("States filtered out: "+str(len(filterr)-np.sum(filterr)))
         
         for ind in range(len(current_params)): #Reload pi*(x,t+dt) parameters
             sess.run(theta[ind].assign(current_params[ind]));
         
-        return sess.run(make_hot,{hot_input:index_best_a_}),values_,filterr
+        return sess.run(make_hot,{hot_input:index_best_a_}),values_
 
     def getTraj(ALL_x,F_PI=[],subSamples=1,StepsLeft=None,Noise = False):
 
@@ -300,7 +297,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
     
     act_color = ['r','g','b','y'];
     if(imp == 1.0):
-        ALL_PI = pickle.load( open( "policies6Dreach_h40_h40_2.pkl", "rb" ) );
+        ALL_PI = pickle.load( open( "policies6Dreach_h30_h30_h30.pkl", "rb" ) );
     while (imp == 1.0):
         state_get = input('State: ');
         sub_smpl = input('SUBSAMPLING: ');
@@ -413,8 +410,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
             ALL_x[:,3] = ALL_x[:,3]*2.0
             ALL_x[:,4] = ALL_x[:,4]*np.pi/5.0 + np.pi;
             ALL_x[:,5] = ALL_x[:,5]*6.0;  
-            PI,_,filterr = getPI(ALL_x,ALL_PI,subSamples=3);
-            ALL_x = ALL_x[filterr]
+            PI,_ = getPI(ALL_x,ALL_PI,subSamples=3);
             pre_ALL_x = ConvCosSin(ALL_x);
             
             ALL_x_ = np.random.uniform(-5.0,5.0,(nrolls/100,layers[0]-1));
@@ -422,8 +418,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
             ALL_x_[:,3] = ALL_x_[:,3]*2.0
             ALL_x_[:,4] = ALL_x_[:,4]*np.pi/5.0 + np.pi;
             ALL_x_[:,5] = ALL_x_[:,5]*6.0; 
-            PI_,_,filterr = getPI(ALL_x_,ALL_PI,subSamples=3);
-            ALL_x_ = ALL_x_[filterr]
+            PI_,_ = getPI(ALL_x_,ALL_PI,subSamples=3);
             pre_ALL_x_ = ConvCosSin(ALL_x_);
 
 #            tmp = np.random.randint(len(reach100s[:,:-1]), size=12000);
@@ -540,8 +535,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
             ALL_x[:,3] = ALL_x[:,3]*2.0
             ALL_x[:,4] = ALL_x[:,4]*np.pi/5.0 + np.pi;
             ALL_x[:,5] = ALL_x[:,5]*6.0;            
-            PI,_,filterr = getPI(ALL_x,F_PI=[],subSamples=3);
-            ALL_x = ALL_x[filterr]
+            PI,_ = getPI(ALL_x,F_PI=[],subSamples=3);
             pre_ALL_x = ConvCosSin(ALL_x);
             elapsed = time.time() - t
             print("Compute Data Time = "+str(elapsed))
@@ -551,8 +545,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
             ALL_x_[:,3] = ALL_x_[:,3]*2.0
             ALL_x_[:,4] = ALL_x_[:,4]*np.pi/5.0 + np.pi;
             ALL_x_[:,5] = ALL_x_[:,5]*6.0; 
-            PI_,_,filterr = getPI(ALL_x_,F_PI=[],subSamples=3);
-            ALL_x_ = ALL_x_[filterr]
+            PI_,_ = getPI(ALL_x_,F_PI=[],subSamples=3);
             pre_ALL_x_ = ConvCosSin(ALL_x_);           
 #            sess.run(set_to_not_zero);
 
@@ -571,14 +564,14 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
             #print str(i) + ") | XEL = " + str(xel) + " | Test_E = " + str(test_e) + " | Lerning Rate = " + str(nunu)
             #print str(PI[[o],:]) + " || " + str(sess.run(l_r[-1],{states:ALL_x[[o],:]})) #+ " || " + str(sess.run(gvs[-1],{states:ALL_x,y:PI}))
             
-        nunu = 0.01#/(np.sqrt(np.mod(i,renew))+1.0)#lr_schedule.value(i);
+        nunu = 0.001#/(np.sqrt(np.mod(i,renew))+1.0)#lr_schedule.value(i);
         #nunu = ler_r/(np.mod(i,renew)+1.0);
         tmp = np.random.randint(len(ALL_x), size=bts);
         sess.run(train_step, feed_dict={states:pre_ALL_x[tmp],y:PI[tmp],nu:nunu});
         #tmp = np.random.randint(len(reach100s), size=bts);
         #sess.run(train_step, feed_dict={states:reach100s[tmp,:-1],y:reach100s[tmp,-1,None],nu:nunu});
 
-    pickle.dump(ALL_PI,open( "policies6Dreach_h300.pkl", "wb" ));
+    pickle.dump(ALL_PI,open( "policies6Dreach_minttime_h30_h30.pkl", "wb" ));
 #    while True:
 #        state_get = input('State: ');
 #        if(state_get == 0):
@@ -587,7 +580,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
 #        print(str(VAL));
 
 num_ac = 2;
-layers1 = [7,300,2**num_ac];
+layers1 = [7,30,30,2**num_ac];
 t_hor = -0.5;
 
-main(layers1,t_hor,0,2000000,50000,0.001,0.95,99,5000,0.0,0);
+main(layers1,t_hor,0,2000000,50000,0.001,0.95,99,7000,0.0,0);

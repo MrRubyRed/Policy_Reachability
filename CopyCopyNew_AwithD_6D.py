@@ -31,6 +31,11 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
     T2Max = 36.7875/2.0;
     T2Min = 0;
     max_list = [T1Max,T2Max];
+    min_list = [T1Min,T2Min];
+    
+    #Disturbance
+    max_list_ = [0.5,0.5];
+    min_list_ = [-0.5,-0.5];
     
     m = 1.25; 
     grav = 9.81;
@@ -83,17 +88,22 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
     num_ac = 2;
     iters = int(np.abs(t_hor)/dt)*renew + 1; 
     ##################### INSTANTIATIONS #################
-    states,y,Tt,L,l_r,lb,reg, cross_entropy = TransDef("Critic",False,layers,depth,incl,center);
+    states,y,Tt,L,l_r,lb,reg, cross_entropy = TransDef("Control",False,layers,depth,incl,center);
+    states_,y_,Tt_,L_,l_r_,lb_,reg_, cross_entropy_ = TransDef("Disturbance",False,layers,depth,incl,center);
     ola1 = tf.argmax(Tt,dimension=1)
     ola2 = tf.argmax(y,dimension=1)
     ola3 = tf.equal(ola1,ola2)
     accuracy = tf.reduce_mean(tf.cast(ola3, tf.float32));
+    ola1_ = tf.argmax(Tt_,dimension=1)
+    ola2_ = tf.argmax(y_,dimension=1)
+    ola3_ = tf.equal(ola1_,ola2_)
+    accuracy_ = tf.reduce_mean(tf.cast(ola3_, tf.float32));    
     #a_layers = layers;
     #a_layers[-1] = 2; #We have two actions
     #states_,y_,Tt_,l_r_,lb_,reg_ = TransDef("Actor",False,a_layers,depth,incl,center,outp=True);
     
-    V_func_vars = tf.get_collection(tf.GraphKeys.VARIABLES, scope='Critic');
-    #A_func_vars = tf.get_collection(tf.GraphKeys.VARIABLES, scope='Actor');
+    C_func_vars = tf.get_collection(tf.GraphKeys.VARIABLES, scope='Control');
+    D_func_vars = tf.get_collection(tf.GraphKeys.VARIABLES, scope='Disturbance');
     
     #var_grad = tf.gradients(Tt_,states_)[0]
     var_grad_ = tf.gradients(Tt,states)[0]
@@ -139,6 +149,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
     #optimizer 
     #train_step = tf.train.AdamOptimizer(learning_rate=nu).minimize(L);
     train_step = tf.train.RMSPropOptimizer(learning_rate=nu,momentum=mom).minimize(L);
+    train_step_ = tf.train.RMSPropOptimizer(learning_rate=nu,momentum=mom).minimize(L_);
     #optimizer = tf.train.RMSPropOptimizer(learning_rate=nu,momentum=mom);
     #gvs = optimizer.compute_gradients(L,theta);
     #capped_gvs = [(tf.clip_by_value(grad, -3., 3.), var) for grad, var in gvs];
@@ -166,11 +177,14 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
        sin_phi = np.sin(ALL_x[:,4,None]);
        cos_phi = np.cos(ALL_x[:,4,None]);
        
+       col1 = ALL_x[:,1,None] + opt_b[:,0,None];
        col2 = -1.0*transDrag*ALL_x[:,1,None]/m - np.multiply(opt_a[:,0,None],sin_phi)/m - np.multiply(opt_a[:,1,None],sin_phi)/m;
+       col3 = ALL_x[:,3,None] + opt_b[:,1,None];
        col4 = -1.0*(m*grav + transDrag*ALL_x[:,3,None]) + np.multiply(opt_a[:,0,None],cos_phi)/m + np.multiply(opt_a[:,1,None],cos_phi)/m;
+       col5 = ALL_x[:,5,None];
        col6 = -1.0*(1.0/Iyy)*rotDrag*ALL_x[:,5,None] - (l/Iyy)*opt_a[:,0,None] + (l/Iyy)*opt_a[:,1,None];
        
-       return np.concatenate((ALL_x[:,1,None],col2,ALL_x[:,3,None],col4,ALL_x[:,5,None],col6),axis=1);
+       return np.concatenate((col1,col2,col3,col4,col5,col6),axis=1);
 
     ####################### RECURSIVE FUNC ####################
 
@@ -201,53 +215,75 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
     true_ac_list = [];
     for i in range(len(perms)): #2**num_actions
         ac_tuple = perms[i];
-        ac_list = [(tmp1==1)*tmp2 for tmp1,tmp2 in zip(ac_tuple,max_list)]; #ASSUMING: aMax = -aMin
+        ac_list = [(tmp1==1)*tmp3 +  (tmp1==-1)*tmp2 for tmp1,tmp2,tmp3 in zip(ac_tuple,min_list,max_list)]; 
         true_ac_list.append(ac_list);
+        
+    dist_ac = 2;    
+    perms_ = list(itertools.product([-1,1], repeat=dist_ac))
+    true_ac_list_ = [];
+    for i in range(len(perms_)): #2**num_actions
+        ac_tuple_ = perms[i];
+        ac_list_ = [(tmp1==1)*tmp3 +  (tmp1==-1)*tmp2 for tmp1,tmp2,tmp3 in zip(ac_tuple_,min_list_,max_list_)]; #ASSUMING: aMax = -aMin
+        true_ac_list_.append(ac_list_);       
     
     def Hot_to_Cold(hots,ac_list):
         a = hots.argmax(axis=1);
         a = np.asarray([ac_list[i] for i in a]);
         return a;
     
-    def getPI(ALL_x,F_PI=[],subSamples=1): #Things to keep in MIND: You want the returned value to be the minimum accross a trajectory.
+    def getPI(ALL_x,F_PI=[], F_PI_=[], subSamples=1): #Things to keep in MIND: You want the returned value to be the minimum accross a trajectory.
 
         current_params = sess.run(theta);
 
         #perms = list(itertools.product([-1,1], repeat=num_ac))
-        next_states = [];
-        for i in range(len(perms)):
-            opt_a = np.asarray(true_ac_list[i])*np.ones([ALL_x.shape[0],1]);
-            Snx = ALL_x;
-            for _ in range(subSamples): 
-                Snx = RK4(Snx,dt/float(subSamples),opt_a,None);
-            next_states.append(Snx);
-        next_states = np.concatenate(next_states,axis=0);
-        values = V_0(next_states[:,[0,2]]);
+        next_states_ = [];
+        for k in range((len(perms_))):
+            next_states = [];
+            opt_b = np.asarray(true_ac_list_[k])*np.ones([ALL_x.shape[0],1]);
+            for i in range(len(perms)):
+                opt_a = np.asarray(true_ac_list[i])*np.ones([ALL_x.shape[0],1]);
+                Snx = ALL_x;
+                for _ in range(subSamples): 
+                    Snx = RK4(Snx,dt/float(subSamples),opt_a,opt_b);
+                next_states.append(Snx);
+            next_states_.append(np.concatenate(next_states,axis=0));
+        next_states_ = np.concatenate(next_states_,axis=0);
+        #values = V_0(next_states[:,[0,2]]);
         
-        for params in F_PI:
+        
+        for params,params_ in zip(F_PI,F_PI_):
             for ind in range(len(params)): #Reload pi*(x,t+dt) parameters
-                sess.run(theta[ind].assign(params[ind]));
+                sess.run(C_func_vars[ind].assign(params[ind]));
+            for ind in range(len(params_)): #Reload pi*(x,t+dt) parameters
+                sess.run(D_func_vars[ind].assign(params_[ind]));            
 
-            hots = sess.run(Tt,{states:ConvCosSin(next_states)});
-            opt_a = Hot_to_Cold(hots,true_ac_list)            
+            tmp = ConvCosSin(next_states_);
+            hots = sess.run(Tt,{states:tmp});
+            opt_a = Hot_to_Cold(hots,true_ac_list)   
+            hots = sess.run(Tt_,{states_:tmp});
+            opt_b = Hot_to_Cold(hots,true_ac_list_)            
             for _ in range(subSamples):
-                next_states = RK4(next_states,dt/float(subSamples),opt_a,None);
-                values = np.min((values,V_0(next_states[:,[0,2]])),axis=0);
+                next_states = RK4(next_states,dt/float(subSamples),opt_a,opt_b);
+                #values = np.min((values,V_0(next_states[:,[0,2]])),axis=0);
         
         values_ = V_0(next_states[:,[0,2]]);
-        compare_vals_ = values_.reshape([-1,ALL_x.shape[0]]).T;         #Changed to values instead of values_
+        pre_compare_vals_ = values_.reshape([-1,ALL_x.shape[0]]).T;         #Changed to values instead of values_
+        final_v = [];
+        final_v_ = [];
+        per = len(perms);
+        for k in range(len(perms_)):
+            final_v.append(np.argmax(pre_compare_vals_[:,k:k*per],axis=1))
+            final_v_.append(np.min(pre_compare_vals_[:,k:k*per],axis=1))
+        finalF = np.concatenate(final_v_,axis=1);
+        index_best_b_ = np.argmin(finalF,axis=1);
+        finalF_ = np.concatenate(final_v_,axis=1);
         index_best_a_ = compare_vals_.argmin(axis=1)                    #Changed to ARGMIN
         values_ = np.min(compare_vals_,axis=1,keepdims=True);
-        
-        filterr = np.max(compare_vals_,axis=1) > -0.8
-        index_best_a_ = index_best_a_[filterr]
-        values_ = values_[filterr]
-        print("States filtered out: "+str(len(filterr)-np.sum(filterr)))
         
         for ind in range(len(current_params)): #Reload pi*(x,t+dt) parameters
             sess.run(theta[ind].assign(current_params[ind]));
         
-        return sess.run(make_hot,{hot_input:index_best_a_}),values_,filterr
+        return sess.run(make_hot,{hot_input:index_best_a_}),values_
 
     def getTraj(ALL_x,F_PI=[],subSamples=1,StepsLeft=None,Noise = False):
 
@@ -300,7 +336,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
     
     act_color = ['r','g','b','y'];
     if(imp == 1.0):
-        ALL_PI = pickle.load( open( "policies6Dreach_h40_h40_2.pkl", "rb" ) );
+        ALL_PI = pickle.load( open( "policies6Dreach_h30_h30_h30.pkl", "rb" ) );
     while (imp == 1.0):
         state_get = input('State: ');
         sub_smpl = input('SUBSAMPLING: ');
@@ -413,8 +449,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
             ALL_x[:,3] = ALL_x[:,3]*2.0
             ALL_x[:,4] = ALL_x[:,4]*np.pi/5.0 + np.pi;
             ALL_x[:,5] = ALL_x[:,5]*6.0;  
-            PI,_,filterr = getPI(ALL_x,ALL_PI,subSamples=3);
-            ALL_x = ALL_x[filterr]
+            PI,_ = getPI(ALL_x,ALL_PI,subSamples=3);
             pre_ALL_x = ConvCosSin(ALL_x);
             
             ALL_x_ = np.random.uniform(-5.0,5.0,(nrolls/100,layers[0]-1));
@@ -422,8 +457,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
             ALL_x_[:,3] = ALL_x_[:,3]*2.0
             ALL_x_[:,4] = ALL_x_[:,4]*np.pi/5.0 + np.pi;
             ALL_x_[:,5] = ALL_x_[:,5]*6.0; 
-            PI_,_,filterr = getPI(ALL_x_,ALL_PI,subSamples=3);
-            ALL_x_ = ALL_x_[filterr]
+            PI_,_ = getPI(ALL_x_,ALL_PI,subSamples=3);
             pre_ALL_x_ = ConvCosSin(ALL_x_);
 
 #            tmp = np.random.randint(len(reach100s[:,:-1]), size=12000);
@@ -540,8 +574,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
             ALL_x[:,3] = ALL_x[:,3]*2.0
             ALL_x[:,4] = ALL_x[:,4]*np.pi/5.0 + np.pi;
             ALL_x[:,5] = ALL_x[:,5]*6.0;            
-            PI,_,filterr = getPI(ALL_x,F_PI=[],subSamples=3);
-            ALL_x = ALL_x[filterr]
+            PI,_ = getPI(ALL_x,F_PI=[],subSamples=3);
             pre_ALL_x = ConvCosSin(ALL_x);
             elapsed = time.time() - t
             print("Compute Data Time = "+str(elapsed))
@@ -551,8 +584,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
             ALL_x_[:,3] = ALL_x_[:,3]*2.0
             ALL_x_[:,4] = ALL_x_[:,4]*np.pi/5.0 + np.pi;
             ALL_x_[:,5] = ALL_x_[:,5]*6.0; 
-            PI_,_,filterr = getPI(ALL_x_,F_PI=[],subSamples=3);
-            ALL_x_ = ALL_x_[filterr]
+            PI_,_ = getPI(ALL_x_,F_PI=[],subSamples=3);
             pre_ALL_x_ = ConvCosSin(ALL_x_);           
 #            sess.run(set_to_not_zero);
 
@@ -571,14 +603,14 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
             #print str(i) + ") | XEL = " + str(xel) + " | Test_E = " + str(test_e) + " | Lerning Rate = " + str(nunu)
             #print str(PI[[o],:]) + " || " + str(sess.run(l_r[-1],{states:ALL_x[[o],:]})) #+ " || " + str(sess.run(gvs[-1],{states:ALL_x,y:PI}))
             
-        nunu = 0.01#/(np.sqrt(np.mod(i,renew))+1.0)#lr_schedule.value(i);
+        nunu = 0.001#/(np.sqrt(np.mod(i,renew))+1.0)#lr_schedule.value(i);
         #nunu = ler_r/(np.mod(i,renew)+1.0);
         tmp = np.random.randint(len(ALL_x), size=bts);
         sess.run(train_step, feed_dict={states:pre_ALL_x[tmp],y:PI[tmp],nu:nunu});
         #tmp = np.random.randint(len(reach100s), size=bts);
         #sess.run(train_step, feed_dict={states:reach100s[tmp,:-1],y:reach100s[tmp,-1,None],nu:nunu});
 
-    pickle.dump(ALL_PI,open( "policies6Dreach_h300.pkl", "wb" ));
+    pickle.dump(ALL_PI,open( "policies6Dreach_minttime_h30_h30.pkl", "wb" ));
 #    while True:
 #        state_get = input('State: ');
 #        if(state_get == 0):
@@ -587,7 +619,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
 #        print(str(VAL));
 
 num_ac = 2;
-layers1 = [7,300,2**num_ac];
+layers1 = [7,30,30,2**num_ac];
 t_hor = -0.5;
 
-main(layers1,t_hor,0,2000000,50000,0.001,0.95,99,5000,0.0,0);
+main(layers1,t_hor,0,2000000,50000,0.001,0.95,99,7000,0.0,0);
