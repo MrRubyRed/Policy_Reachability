@@ -616,7 +616,7 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
         #tmp = np.random.randint(len(reach100s), size=bts);
         #sess.run(train_step, feed_dict={states:reach100s[tmp,:-1],y:reach100s[tmp,-1,None],nu:nunu});
 
-    pickle.dump(ALL_PI,open( "policies8.pkl", "wb" ));
+    pickle.dump(ALL_PI,open( "policies4D_reach_h20_h20.pkl", "wb" ));
 #    while True:
 #        state_get = input('State: ');
 #        if(state_get == 0):
@@ -626,6 +626,6 @@ def main(layers,t_hor,ind,nrolls,bts,ler_r,mom,teps,renew,imp,q):
 
 num_ac = 2;
 layers1 = [5,20,20,2**num_ac]; #[5,20,20,20,2**num_ac],[5,30,25,2**num_ac],[5,20,20,2**num_ac],[5,50,50,2**num_ac],[5,50,50,2**num_ac]
-t_hor = -0.25;
+t_hor = -0.5;
 
-main(layers1,t_hor,0,2000000,50000,0.001,0.95,99,5000,1.0,0);
+main(layers1,t_hor,0,2000000,50000,0.001,0.95,99,5000,0.0,0);
